@@ -12,12 +12,16 @@ set(ROS_BUILD_TYPE Release)
 
 rosbuild_init()
 
-set(EXECUTABLE_OUTPUT_PATH bin)
+#rosbuild_add_boost_directories()
+
+set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 
 
 set(DSO_PATH $ENV{DSO_PATH})
 message("\n\n---- LOOKING FOR DSO at\n\"${DSO_PATH}\"")
 
+find_package(sophus_ros_conversions REQUIRED)
+message("DENTAL PLAN... Lisa needs braces...")
 
 find_package(Pangolin 0.2 REQUIRED)
 message("\n\n---- FOUND Pangolin Headers at\n\"${Pangolin_INCLUDE_DIRS}\"")
@@ -34,7 +38,7 @@ find_library(DSO_LIBRARY dso ${DSO_PATH}/build/lib)
 # SSE flags
 rosbuild_check_for_sse()
 set(CMAKE_CXX_FLAGS
-   "${SSE_FLAGS} -O2 -g -std=c++0x -march=native -fno-omit-frame-pointer"
+   "${SSE_FLAGS} -O2 -g -std=c++0x -march=native -fno-omit-frame-pointer -lboost_system "
 )
 
 set(SOURCE_FILES         
@@ -48,9 +52,12 @@ include_directories(
   ${OpenCV_INCLUDE_DIRS}
   ${Pangolin_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIR}
+  /opt/ros/kinetic/share/sophus_ros_conversions/  
 )  
 
 rosbuild_add_executable(dso_live src/main.cpp ${SOURCE_FILES})
 target_link_libraries(dso_live ${DSO_LIBRARY} ${Pangolin_LIBRARIES} ${OpenCV_LIBS})
+target_link_libraries(dso_live boost_system)
+target_link_libraries(dso_live sophus_ros_conversions)
 rosbuild_link_boost(dso_live thread)
 
