@@ -1,6 +1,6 @@
 /**
 * This file is part of DSO.
-* 
+*
 * Copyright 2016 Technical University of Munich and Intel.
 * Developed by Jakob Engel <engelj at in dot tum dot de>,
 * for more information see <http://vision.in.tum.de/dso>.
@@ -36,7 +36,7 @@
 #include "util/Undistort.h"
 #include "IOWrapper/Pangolin/PangolinDSOViewer.h"
 #include "IOWrapper/OutputWrapper/SampleOutputWrapper.h"
-
+#include "RosOutputWrapper.h"
 
 #include <ros/ros.h>
 #include <sensor_msgs/image_encodings.h>
@@ -50,6 +50,7 @@ std::string calib = "";
 std::string vignetteFile = "";
 std::string gammaFile = "";
 bool useSampleOutput=false;
+bool useRosOutput=true;
 
 using namespace dso;
 
@@ -216,6 +217,9 @@ int main( int argc, char** argv )
     if(useSampleOutput)
         fullSystem->outputWrapper.push_back(new IOWrap::SampleOutputWrapper());
 
+    if(useRosOutput)
+        fullSystem->outputWrapper.push_back(new IOWrap::RosOutputWrapper());
+
 
     if(undistorter->photometricUndist != 0)
     	fullSystem->setGammaFunction(undistorter->photometricUndist->getG());
@@ -236,4 +240,3 @@ int main( int argc, char** argv )
 
 	return 0;
 }
-
