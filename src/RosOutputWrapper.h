@@ -38,27 +38,39 @@
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/CameraInfo.h>
+#include <sensor_msgs/PointCloud.h>
+#include <std_msgs/Header.h>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseStamped.h>
 #include "cv_bridge/cv_bridge.h"
 
 namespace dso
 {
-
 class FrameHessian;
 class CalibHessian;
 class FrameShell;
-
 
 namespace IOWrap
 {
 
 class RosOutputWrapper : public Output3DWrapper
 {
+private:
+//  ros::NodeHandle nh;
+  ros::Publisher pub_pose;
+  ros::Publisher pub_image;
+  ros::Publisher pub_pointcloud;
+
 public:
-        inline RosOutputWrapper()
+        inline RosOutputWrapper()    //const ros::Publisher& publisher
         {
             printf("OUT: Created RosOutputWrapper\n");
+            int argc = 0;
+            ros::init(argc, NULL, "dso_ros");
+            ros::NodeHandle nh;
+            pub_pose = nh.advertise<geometry_msgs::PoseStamped>("/dso_ros/pose", 1000);
+            pub_image = nh.advertise<sensor_msgs::Image>("/dso_ros/image", 100);
+            pub_pointcloud = nh.advertise<sensor_msgs::PointCloud>("/dso_ros/pointcloud", 100);
         }
 
         virtual ~RosOutputWrapper()
@@ -81,20 +93,6 @@ public:
                 if(maxWrite==0) break;
             }
         }
-
-        // Convert matrix3x4 to ROS Pose
-        geometry_msgs::Pose eigenMatrixToPoseMsg(const Eigen::MatrixXd& s) {
-          geometry_msgs::Pose pose;
-          Eigen::Vector3d translation = s.col(3);
-          Eigen::Vector3f translationf = translation.cast<float>();
-          pose.position = sophus_ros_conversions::eigenToPointMsg(translationf);
-          Eigen::Matrix3d mat3d = s.block<3,3>(0,0);
-          Eigen::Matrix3f mat3f = mat3d.cast<float>();
-          Eigen::Quaternionf quaternionf(mat3f) ;
-          pose.orientation = sophus_ros_conversions::eigenToQuaternionMsg(quaternionf);
-          return pose;
-        }
-
 
         virtual void publishKeyframes( std::vector<FrameHessian*> &frames, bool final, CalibHessian* HCalib) override
         {
@@ -120,31 +118,51 @@ public:
             }
         }
 
+        // Convert matrix3x4 to ROS Pose
+        geometry_msgs::Pose eigenMatrixToPoseMsg(const Eigen::MatrixXd& s) {
+          geometry_msgs::Pose pose;
+          Eigen::Vector3d translation = s.col(3);
+          Eigen::Vector3f translationf = translation.cast<float>();
+          pose.position = sophus_ros_conversions::eigenToPointMsg(translationf);
+          Eigen::Matrix3d mat3d = s.block<3,3>(0,0);
+          Eigen::Matrix3f mat3f = mat3d.cast<float>();
+          Eigen::Quaternionf quaternionf(mat3f) ;
+          pose.orientation = sophus_ros_conversions::eigenToQuaternionMsg(quaternionf);
+          return pose;
+        }
+
         virtual void publishCamPose(FrameShell* frame, CalibHessian* HCalib) override
         {
-//            printf("ROS OUT: Current Frame %d (time %f, internal ID %d). CameraToWorld:\n",
-//                   frame->incoming_id,
-//                   frame->timestamp,
-//                   frame->id);
-//            std::cout << frame->camToWorld.matrix3x4() << "\n";
-//            geometry_msgs::Pose pose = sophus_ros_conversions::sophusToPoseMsg(frame->camToWorld.matrix3x4().cast<float>());
             geometry_msgs::Pose pose = eigenMatrixToPoseMsg(frame->camToWorld.matrix3x4());
-//            geometry_msgs::Pose pose = sophusDoubleToPoseMsg(frame->camToWorld);
-//              geometry_msgs::Pose pose = sophus_ros_conversions::sophusToPoseMsg(frame->camToWorld.cast<float>());
-            printf("ROS POSE ::\n");
-            std::cout << pose << "\n";
+            //if (ros::ok()) { printf("ROS OK\n");} else {printf("ROS NOT OK\n");}
+//            printf("ROS-POSE ::\n");
+//            std::cout << pose << "\n";
+            std_msgs::Header header;
+            header.stamp = ros::Time::now();
+            header.frame_id = "1"; //     0 = no frame, 1 = global frame
+            geometry_msgs::PoseStamped ps;
+            ps.header = header;
+            ps.pose = pose;
+            pub_pose.publish(ps);
+            ROS_INFO("Published pose.");
         }
 
 
         virtual void pushLiveFrame(FrameHessian* image) override
         {
+            ROS_INFO("pushLiveFrame\n");
+//            ROS_INFO(image);
             // can be used to get the raw image / intensity pyramid.
         }
 
         virtual void pushDepthImage(MinimalImageB3* image) override
         {
-            // can be used to get the raw image with depth overlay.
+          // can be used to get the raw image with depth overlay.
+          sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv::Mat(image->h, image->w, CV_8UC3, image->data)).toImageMsg();
+          pub_image.publish(msg);
+          ROS_INFO("ROS:  Publishing Depth Image.\n");
         }
+
         virtual bool needPushDepthImage() override
         {
             return false;
