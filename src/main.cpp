@@ -21,10 +21,6 @@
 * along with DSO. If not, see <http://www.gnu.org/licenses/>.
 */
 
-
-
-
-
 #include <locale.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -43,8 +39,8 @@
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/Pose.h>
 #include "cv_bridge/cv_bridge.h"
-
 
 std::string calib = "";
 std::string vignetteFile = "";
@@ -131,9 +127,6 @@ void parseArgument(char* arg)
 	printf("could not parse argument \"%s\"!!\n", arg);
 }
 
-
-
-
 FullSystem* fullSystem = 0;
 Undistort* undistorter = 0;
 int frameID = 0;
@@ -143,7 +136,6 @@ void vidCb(const sensor_msgs::ImageConstPtr img)
 	cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::MONO8);
 	assert(cv_ptr->image.type() == CV_8U);
 	assert(cv_ptr->image.channels() == 1);
-
 
 	if(setting_fullResetRequested)
 	{
@@ -163,21 +155,13 @@ void vidCb(const sensor_msgs::ImageConstPtr img)
 	fullSystem->addActiveFrame(undistImg, frameID);
 	frameID++;
 	delete undistImg;
-
 }
-
-
-
-
 
 int main( int argc, char** argv )
 {
 	ros::init(argc, argv, "dso_live");
 
-
-
 	for(int i=1; i<argc;i++) parseArgument(argv[i]);
-
 
 	setting_desiredImmatureDensity = 1000;
 	setting_desiredPointDensity = 1200;
@@ -188,13 +172,10 @@ int main( int argc, char** argv )
 	setting_logStuff = false;
 	setting_kfGlobalWeight = 1.3;
 
-
 	printf("MODE WITH CALIBRATION, but without exposure times!\n");
 	setting_photometricCalibration = 2;
 	setting_affineOptModeA = 0;
 	setting_affineOptModeB = 0;
-
-
 
     undistorter = Undistort::getUndistorterForFile(calib, gammaFile, vignetteFile);
 
@@ -203,29 +184,25 @@ int main( int argc, char** argv )
             (int)undistorter->getSize()[1],
             undistorter->getK().cast<float>());
 
-
     fullSystem = new FullSystem();
     fullSystem->linearizeOperation=false;
-
 
     if(!disableAllDisplay)
 	    fullSystem->outputWrapper.push_back(new IOWrap::PangolinDSOViewer(
 	    		 (int)undistorter->getSize()[0],
 	    		 (int)undistorter->getSize()[1]));
 
-
     if(useSampleOutput)
         fullSystem->outputWrapper.push_back(new IOWrap::SampleOutputWrapper());
+
+		ros::NodeHandle nh;
+    ros::Subscriber imgSub = nh.subscribe("image", 1, &vidCb);
 
     if(useRosOutput)
         fullSystem->outputWrapper.push_back(new IOWrap::RosOutputWrapper());
 
-
     if(undistorter->photometricUndist != 0)
     	fullSystem->setGammaFunction(undistorter->photometricUndist->getG());
-
-    ros::NodeHandle nh;
-    ros::Subscriber imgSub = nh.subscribe("image", 1, &vidCb);
 
     ros::spin();
 
