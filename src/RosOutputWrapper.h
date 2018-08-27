@@ -66,6 +66,8 @@ private:
   ros::Publisher pub_pose;
   ros::Publisher pub_image;
   ros::Publisher pub_pointcloud;
+  uint32_t sequence = 0;
+  bool final_kf_only = false;
 
 public:
         inline RosOutputWrapper()    //const ros::Publisher& publisher
@@ -116,14 +118,13 @@ public:
 //            output_points.open("points.ply", std::ios_base::app);
 
             PointCloud::Ptr msg (new PointCloud);
-            msg->header.frame_id = "0";
-            msg->height = msg->width = 1;    //
-            msg->is_dense = false;
+            msg->height = msg->width = 1;    // width will get overwritten later
+            msg->is_dense = false;        // for some reason it was defaulting true, which is not correct
 
             int counter = 0;
             for(FrameHessian* f : frames)
             {
-                if (true) // final
+                if (final_kf_only) // true if you only want to display keyframes which have been finalized, whatever the f that means
                 {
                   auto const & m =  f->shell->camToWorld.matrix3x4();
                   auto const & points = f->pointHessiansMarginalized;
@@ -144,7 +145,11 @@ public:
                   }
                 }
                 msg->width = counter;
-                pcl_conversions::toPCL(ros::Time::now(), msg->header.stamp);
+                std_msgs::Header header;
+                header.seq = sequence++ - 1;
+                header.stamp = ros::Time::now();
+                header.frame_id = "pointcloud_frame"
+                pcl_conversions::toPCL(header, msg->header);
                 pub_pointcloud.publish(msg);
 //                output_points.close();
             }
@@ -180,7 +185,7 @@ public:
 
         virtual void pushLiveFrame(FrameHessian* image) override
         {
-            ROS_INFO("pushLiveFrame\n");
+//            ROS_INFO("pushLiveFrame\n");
         }
 
         virtual void pushDepthImage(MinimalImageB3* image) override
