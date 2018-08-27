@@ -38,7 +38,7 @@
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/CameraInfo.h>
-#include <sensor_msgs/PointCloud.h>
+#include <sensor_msgs/PointCloud2.h>
 #include <std_msgs/Header.h>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseStamped.h>
@@ -70,7 +70,7 @@ public:
             ros::NodeHandle nh;
             pub_pose = nh.advertise<geometry_msgs::PoseStamped>("/dso_ros/pose", 1000);
             pub_image = nh.advertise<sensor_msgs::Image>("/dso_ros/image", 100);
-            pub_pointcloud = nh.advertise<sensor_msgs::PointCloud>("/dso_ros/pointcloud", 100);
+            pub_pointcloud = nh.advertise<sensor_msgs::PointCloud2>("/dso_ros/pointcloud", 100);
         }
 
         virtual ~RosOutputWrapper()
@@ -96,6 +96,19 @@ public:
 
         virtual void publishKeyframes( std::vector<FrameHessian*> &frames, bool final, CalibHessian* HCalib) override
         {
+            float fx = HCalib->fxl();
+            float fy = HCalib->fyl();
+            float cx = HCalib->cxl();
+            float cy = HCalib->cyl();
+            float fxi = 1/fx;
+            float fyi = 1/fy;
+            float cxi = -cx / fx;
+            float cyi = -cy / fy;
+
+            // output points to text file
+            std::ofstream output_points;
+            output_points.open("points.ply", std::ios_base::app);
+
             for(FrameHessian* f : frames)
             {
                 printf("OUT: KF %d (%s) (id %d, tme %f): %d active, %d marginalized, %d immature points. CameraToWorld:\n",
@@ -106,7 +119,6 @@ public:
                        (int)f->pointHessians.size(), (int)f->pointHessiansMarginalized.size(), (int)f->immaturePoints.size());
                 std::cout << f->shell->camToWorld.matrix3x4() << "\n";
 
-
                 int maxWrite = 5;
                 for(PointHessian* p : f->pointHessians)
                 {
@@ -115,6 +127,21 @@ public:
                     maxWrite--;
                     if(maxWrite==0) break;
                 }
+
+                auto const & m =  f->shell->camToWorld.matrix3x4();
+                auto const & points = f->pointHessiansMarginalized;
+                for (auto const * p : points) {
+                  float depth = 1.0f / p->idepth;
+                  auto const x = (p->u * fxi + cxi) * depth;
+                  auto const y = (p->v * fyi + cyi) * depth;
+                  auto const z = depth * (1 + 2*fxi);
+                  Eigen::Vector4d camPoint(x, y, z, 1.f);
+                  Eigen::Vector3d worldPoint = m * camPoint;
+
+                  output_points << worldPoint.transpose() << std::endl;
+                }
+                // Close steam
+                output_points.close();
             }
         }
 
@@ -134,9 +161,7 @@ public:
         virtual void publishCamPose(FrameShell* frame, CalibHessian* HCalib) override
         {
             geometry_msgs::Pose pose = eigenMatrixToPoseMsg(frame->camToWorld.matrix3x4());
-            //if (ros::ok()) { printf("ROS OK\n");} else {printf("ROS NOT OK\n");}
-//            printf("ROS-POSE ::\n");
-//            std::cout << pose << "\n";
+            //  Coordinates are in image frame: x-axis is on image columns, y-axis is on image lines, z axis is "forward" (depth)
             std_msgs::Header header;
             header.stamp = ros::Time::now();
             header.frame_id = "1"; //     0 = no frame, 1 = global frame
@@ -151,8 +176,6 @@ public:
         virtual void pushLiveFrame(FrameHessian* image) override
         {
             ROS_INFO("pushLiveFrame\n");
-//            ROS_INFO(image);
-            // can be used to get the raw image / intensity pyramid.
         }
 
         virtual void pushDepthImage(MinimalImageB3* image) override
@@ -160,7 +183,7 @@ public:
           // can be used to get the raw image with depth overlay.
           sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv::Mat(image->h, image->w, CV_8UC3, image->data)).toImageMsg();
           pub_image.publish(msg);
-          ROS_INFO("ROS:  Publishing Depth Image.\n");
+//          ROS_INFO("ROS:  Publishing Depth Image.\n");
         }
 
         virtual bool needPushDepthImage() override
