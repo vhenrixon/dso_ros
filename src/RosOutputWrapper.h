@@ -67,7 +67,7 @@ private:
   ros::Publisher pub_image;
   ros::Publisher pub_pointcloud;
   uint32_t sequence = 0;
-  bool final_kf_only = false;
+  bool show_nonfinal_kf = false;    // create pointcloud data for frames which are not keyframes
 
 public:
         inline RosOutputWrapper()    //const ros::Publisher& publisher
@@ -124,7 +124,7 @@ public:
             int counter = 0;
             for(FrameHessian* f : frames)
             {
-                if (final_kf_only) // true if you only want to display keyframes which have been finalized, whatever the f that means
+                if (final || show_nonfinal_kf)
                 {
                   auto const & m =  f->shell->camToWorld.matrix3x4();
                   auto const & points = f->pointHessiansMarginalized;
@@ -143,15 +143,15 @@ public:
 //                      output_points << worldPoint.transpose() << std::endl;
                       counter++;
                   }
+                  msg->width = counter;
+                  std_msgs::Header header;
+                  header.seq = sequence++ - 1;
+                  header.stamp = ros::Time::now();
+                  header.frame_id = "pointcloud_frame";
+                  pcl_conversions::toPCL(header, msg->header);
+                  pub_pointcloud.publish(msg);
+  //                output_points.close();
                 }
-                msg->width = counter;
-                std_msgs::Header header;
-                header.seq = sequence++ - 1;
-                header.stamp = ros::Time::now();
-                header.frame_id = "pointcloud_frame"
-                pcl_conversions::toPCL(header, msg->header);
-                pub_pointcloud.publish(msg);
-//                output_points.close();
             }
         }
 
