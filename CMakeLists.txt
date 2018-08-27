@@ -41,6 +41,7 @@ find_package(OpenCV REQUIRED)
 message("\n\n---- FOUND OpenCV Headers at\n\"${OpenCV_INCLUDE_DIRS}\"")
 message("---- FOUND OpenCV Libs at\n\"${OpenCV_LIBS}\"")
 
+find_package(PCL 1.3 REQUIRED COMPONENTS common io)
 find_package(Eigen3 REQUIRED)
 find_package(Boost COMPONENTS system thread)
 find_library(DSO_LIBRARY dso ${DSO_PATH}/build/lib)
@@ -62,12 +63,18 @@ include_directories(
   ${OpenCV_INCLUDE_DIRS}
   ${Pangolin_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIR}
-  /opt/ros/kinetic/share/sophus_ros_conversions/
+  ${PCL_INCLUDE_DIRS}
+  /opt/ros/kinetic/share/sophus_ros_conversions
 )
+
+link_directories(${PCL_LIBRARY_DIRS})
+add_definitions(${PCL_DEFINITIONS})
+
 
 rosbuild_add_executable(dso_live src/main.cpp ${SOURCE_FILES})
 target_link_libraries(dso_live ${DSO_LIBRARY} ${Pangolin_LIBRARIES} ${OpenCV_LIBS})
 target_link_libraries(dso_live boost_system)
 target_link_libraries(dso_live ${catkin_LIBRARIES})
 target_link_libraries(dso_live sophus_ros_conversions)
+target_link_libraries(dso_live ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES})
 rosbuild_link_boost(dso_live thread)
