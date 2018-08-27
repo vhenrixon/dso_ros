@@ -38,11 +38,17 @@
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/CameraInfo.h>
-#include <sensor_msgs/PointCloud2.h>
 #include <std_msgs/Header.h>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseStamped.h>
 #include "cv_bridge/cv_bridge.h"
+
+#include <pcl_ros/point_cloud.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+#include <pcl_conversions/pcl_conversions.h>
+
+typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 
 namespace dso
 {
@@ -70,7 +76,7 @@ public:
             ros::NodeHandle nh;
             pub_pose = nh.advertise<geometry_msgs::PoseStamped>("/dso_ros/pose", 1000);
             pub_image = nh.advertise<sensor_msgs::Image>("/dso_ros/image", 100);
-            pub_pointcloud = nh.advertise<sensor_msgs::PointCloud2>("/dso_ros/pointcloud", 100);
+            pub_pointcloud = nh.advertise<PointCloud>("/dso_ros/pointcloud", 100);
         }
 
         virtual ~RosOutputWrapper()
@@ -106,42 +112,41 @@ public:
             float cyi = -cy / fy;
 
             // output points to text file
-            std::ofstream output_points;
-            output_points.open("points.ply", std::ios_base::app);
+//            std::ofstream output_points;
+//            output_points.open("points.ply", std::ios_base::app);
 
+            PointCloud::Ptr msg (new PointCloud);
+            msg->header.frame_id = "0";
+            msg->height = msg->width = 1;    //
+            msg->is_dense = false;
+
+            int counter = 0;
             for(FrameHessian* f : frames)
             {
-                printf("OUT: KF %d (%s) (id %d, tme %f): %d active, %d marginalized, %d immature points. CameraToWorld:\n",
-                       f->frameID,
-                       final ? "final" : "non-final",
-                       f->shell->incoming_id,
-                       f->shell->timestamp,
-                       (int)f->pointHessians.size(), (int)f->pointHessiansMarginalized.size(), (int)f->immaturePoints.size());
-                std::cout << f->shell->camToWorld.matrix3x4() << "\n";
-
-                int maxWrite = 5;
-                for(PointHessian* p : f->pointHessians)
+                if (true) // final
                 {
-                    printf("OUT: Example Point x=%.1f, y=%.1f, idepth=%f, idepth std.dev. %f, %d inlier-residuals\n",
-                           p->u, p->v, p->idepth_scaled, sqrt(1.0f / p->idepth_hessian), p->numGoodResiduals );
-                    maxWrite--;
-                    if(maxWrite==0) break;
+                  auto const & m =  f->shell->camToWorld.matrix3x4();
+                  auto const & points = f->pointHessiansMarginalized;
+                  for (auto const * p : points) {
+                      float depth = 1.0f / p->idepth;
+                      auto const x = (p->u * fxi + cxi) * depth;
+                      auto const y = (p->v * fyi + cyi) * depth;
+                      auto const z = depth * (1 + 2*fxi);
+                      Eigen::Vector4d camPoint(x, y, z, 1.f);
+                      Eigen::Vector3d worldPoint = m * camPoint;
+                      pcl::PointXYZ temp;
+                      temp.x = worldPoint[0];
+                      temp.y = worldPoint[1];
+                      temp.z = worldPoint[2];
+                      msg->points.push_back(temp);
+//                      output_points << worldPoint.transpose() << std::endl;
+                      counter++;
+                  }
                 }
-
-                auto const & m =  f->shell->camToWorld.matrix3x4();
-                auto const & points = f->pointHessiansMarginalized;
-                for (auto const * p : points) {
-                  float depth = 1.0f / p->idepth;
-                  auto const x = (p->u * fxi + cxi) * depth;
-                  auto const y = (p->v * fyi + cyi) * depth;
-                  auto const z = depth * (1 + 2*fxi);
-                  Eigen::Vector4d camPoint(x, y, z, 1.f);
-                  Eigen::Vector3d worldPoint = m * camPoint;
-
-                  output_points << worldPoint.transpose() << std::endl;
-                }
-                // Close steam
-                output_points.close();
+                msg->width = counter;
+                pcl_conversions::toPCL(ros::Time::now(), msg->header.stamp);
+                pub_pointcloud.publish(msg);
+//                output_points.close();
             }
         }
 
@@ -180,10 +185,9 @@ public:
 
         virtual void pushDepthImage(MinimalImageB3* image) override
         {
-          // can be used to get the raw image with depth overlay.
+          // publishes input image overlayed with key points
           sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv::Mat(image->h, image->w, CV_8UC3, image->data)).toImageMsg();
           pub_image.publish(msg);
-//          ROS_INFO("ROS:  Publishing Depth Image.\n");
         }
 
         virtual bool needPushDepthImage() override
