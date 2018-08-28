@@ -26,13 +26,14 @@
 #include "boost/thread.hpp"
 #include "util/MinimalImage.h"
 #include "IOWrapper/Output3DWrapper.h"
+#include "FullSystem/HessianBlocks.h"
+#include "util/FrameShell.h"
 
 #include "sophus_ros_conversions/geometry.hpp"
 #include "sophus_ros_conversions/eigen.hpp"
 #include <Eigen/Geometry>
 
-#include "FullSystem/HessianBlocks.h"
-#include "util/FrameShell.h"
+#include "cv_bridge/cv_bridge.h"
 
 #include <ros/ros.h>
 #include <sensor_msgs/image_encodings.h>
@@ -40,8 +41,8 @@
 #include <sensor_msgs/CameraInfo.h>
 #include <std_msgs/Header.h>
 #include <geometry_msgs/Pose.h>
-#include <geometry_msgs/PoseStamped.h>
-#include "cv_bridge/cv_bridge.h"
+#include <geometry_msgs/PoseWithCovariance.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
 
 #include <pcl_ros/point_cloud.h>
 #include <pcl/io/pcd_io.h>
@@ -58,6 +59,30 @@ class FrameShell;
 
 namespace IOWrap
 {
+
+  // some arbitrary values (0.1m^2 linear cov. 10deg^2. angular cov.)
+  static const boost::array<double, 36> STANDARD_POSE_COVARIANCE =
+  { { 0.1, 0, 0, 0, 0, 0,
+      0, 0.1, 0, 0, 0, 0,
+      0, 0, 0.1, 0, 0, 0,
+      0, 0, 0, 0.17, 0, 0,
+      0, 0, 0, 0, 0.17, 0,
+      0, 0, 0, 0, 0, 0.17 } };
+  static const boost::array<double, 36> STANDARD_TWIST_COVARIANCE =
+  { { 0.002, 0, 0, 0, 0, 0,
+      0, 0.002, 0, 0, 0, 0,
+      0, 0, 0.05, 0, 0, 0,
+      0, 0, 0, 0.09, 0, 0,
+      0, 0, 0, 0, 0.09, 0,
+      0, 0, 0, 0, 0, 0.09 } };
+  static const boost::array<double, 36> BAD_COVARIANCE =
+  { { 9999, 0, 0, 0, 0, 0,
+      0, 9999, 0, 0, 0, 0,
+      0, 0, 9999, 0, 0, 0,
+      0, 0, 0, 9999, 0, 0,
+      0, 0, 0, 0, 9999, 0,
+  0, 0, 0, 0, 0, 9999 } };
+
 
 class RosOutputWrapper : public Output3DWrapper
 {
@@ -76,7 +101,7 @@ public:
             int argc = 0;
             ros::init(argc, NULL, "dso_ros");
             ros::NodeHandle nh;
-            pub_pose = nh.advertise<geometry_msgs::PoseStamped>("/dso_ros/pose", 1000);
+            pub_pose = nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("/dso_ros/pose", 1000);
             pub_image = nh.advertise<sensor_msgs::Image>("/dso_ros/image", 100);
             pub_pointcloud = nh.advertise<PointCloud>("/dso_ros/pointcloud", 100);
         }
@@ -150,6 +175,7 @@ public:
                   header.frame_id = "pointcloud_frame";
                   pcl_conversions::toPCL(header, msg->header);
                   pub_pointcloud.publish(msg);
+                  ROS_INFO("Published point cloud.");
   //                output_points.close();
                 }
             }
@@ -175,11 +201,14 @@ public:
             std_msgs::Header header;
             header.stamp = ros::Time::now();
             header.frame_id = "1"; //     0 = no frame, 1 = global frame
-            geometry_msgs::PoseStamped ps;
-            ps.header = header;
-            ps.pose = pose;
-            pub_pose.publish(ps);
-            ROS_INFO("Published pose.");
+            geometry_msgs::PoseWithCovariance pwc;
+            pwc.pose = pose;
+            pwc.covariance = STANDARD_POSE_COVARIANCE;
+            geometry_msgs::PoseWithCovarianceStamped pwcs;
+            pwcs.header = header;
+            pwcs.pose = pwc;
+            pub_pose.publish(pwcs);
+            ROS_INFO("Published PoseWithCovarianceStamped.");
         }
 
 
@@ -193,6 +222,7 @@ public:
           // publishes input image overlayed with key points
           sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv::Mat(image->h, image->w, CV_8UC3, image->data)).toImageMsg();
           pub_image.publish(msg);
+          ROS_INFO("Published Depth Image.");
         }
 
         virtual bool needPushDepthImage() override
