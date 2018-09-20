@@ -18,17 +18,17 @@ rosbuild_init()
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 
-
-set(DSO_PATH $ENV{DSO_PATH})
+#set(DSO_PATH $ENV{DSO_PATH})
+set(DSO_PATH /home/nvidia/catkin_ws/dso/)
 message("\n\n---- LOOKING FOR DSO at\n\"${DSO_PATH}\"")
 
 find_package(sophus_ros_conversions REQUIRED)
 message("DENTAL PLAN... Lisa needs braces...")
 
-find_package(catkin REQUIRED COMPONENTS roscpp rospy geometry_msgs)
+find_package(catkin REQUIRED COMPONENTS roscpp rospy geometry_msgs tf2 tf2_geometry_msgs tf2_ros)
 
 catkin_package(
-  CATKIN_DEPENDS geometry_msgs roscpp
+  CATKIN_DEPENDS geometry_msgs roscpp tf2 tf2_geometry_msgs tf2_ros
 )
 
 include_directories(include ${catkin_INCLUDE_DIRS})
