@@ -1,0 +1,8 @@
+<launch>
+    <include file="$(find spinnaker_sdk_camera_driver)/launch/acquisition.launch"></include>
+    <node name="dso_live" pkg="dso_ros" type="dso_live"></node>
+    <arg name="image" default="/camera_array/cam0/image_raw"></arg>
+    <arg name="calib" default="$(find dso_ros)/config/camera.txt"></arg>
+    <arg name="gamma" default="$(find dso_ros)/config/pcalib.txt"></arg>
+    <arg name="vignette" default="$(find dso_ros)/config/vignette.png"></arg>
+</launch>

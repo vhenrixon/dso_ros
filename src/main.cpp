@@ -44,12 +44,14 @@
 #include <sensor_msgs/CameraInfo.h>
 #include <geometry_msgs/PoseStamped.h>
 #include "cv_bridge/cv_bridge.h"
+#include "RosOutputWrapper.h"
 
 
 std::string calib = "";
 std::string vignetteFile = "";
 std::string gammaFile = "";
 bool useSampleOutput=false;
+bool useRosOutput=true;
 
 using namespace dso;
 
@@ -223,7 +225,14 @@ int main( int argc, char** argv )
     ros::NodeHandle nh;
     ros::Subscriber imgSub = nh.subscribe("image", 1, &vidCb);
 
-    ros::spin();
+
+	if(useRosOutput)
+		fullSystem->outputWrapper.push_back(new IOWrap::RosOutputWrapper());
+	
+	if(undistorter->photometricUndist != 0)
+		fullSystem->setGammaFunction(undistorter->photometricUndist->getG());
+
+	ros::spin();
 
     for(IOWrap::Output3DWrapper* ow : fullSystem->outputWrapper)
     {
