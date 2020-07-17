@@ -10,10 +10,12 @@ find_package(catkin REQUIRED COMPONENTS
   tf2
   tf2_geometry_msgs
   tf2_ros
+  angles
 )
 
 set(DSO_PATH $ENV{DSO_PATH})
 message("\n\n---- LOOKING FOR DSO at\n\"${DSO_PATH}\"")
+
 
 
 find_package(Pangolin 0.2 REQUIRED)
